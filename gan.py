@@ -76,7 +76,7 @@ discriminator_grad_fn = jax.value_and_grad(discriminator_forward_and_loss)
 generator_grad_fn = jax.value_and_grad(generator_forward_and_loss)
 
 
-# @jax.jit
+@jax.jit
 def train_step(
         generator_params,
         discriminator_params,
