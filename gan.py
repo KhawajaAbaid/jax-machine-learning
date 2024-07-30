@@ -1,4 +1,5 @@
 import jax
+import optax
 from jax import random, numpy as jnp, vmap, tree, nn
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -6,6 +7,7 @@ from typing import Sequence
 import numpy as np
 from PIL import Image
 import os
+from optimizers import build_adam, apply_adam
 
 
 def init_mlp_params(
@@ -27,8 +29,8 @@ def generator_forward(params, x):
         x = nn.leaky_relu(x, negative_slope=0.2)
     last_layer = list(params.values())[-1]
     logits = jnp.dot(x, last_layer['W']) + last_layer['b']
-    logits = nn.tanh(logits)
-    return logits
+    image = nn.tanh(logits)
+    return image
 
 
 def discriminaor_forward(params, x):
@@ -74,14 +76,17 @@ discriminator_grad_fn = jax.value_and_grad(discriminator_forward_and_loss)
 generator_grad_fn = jax.value_and_grad(generator_forward_and_loss)
 
 
-@jax.jit
+# @jax.jit
 def train_step(
         generator_params,
         discriminator_params,
+        generator_optimizer_params,
+        discriminator_optimizer_params,
+        batch_num,
         x_batched,
         noise_batched_for_discriminator,
         noise_batched_for_generator,
-        learning_rate=0.01,
+        learning_rate=0.0002,
 ):
     """
     noise_batched_for_discriminator means that the noise will be used in the
@@ -111,11 +116,21 @@ def train_step(
         discriminator_grads_real,
         discriminator_grads_fake
     )
-    discriminator_params = tree.map(
-        lambda p, g: p - learning_rate * g,
+    # discriminator_params = tree.map(
+    #     lambda p, g: p - learning_rate * g,
+    #     discriminator_params,
+    #     discriminator_grads
+    # )
+
+    discriminator_params, discriminator_optimizer_params = apply_adam(
+        discriminator_optimizer_params,
         discriminator_params,
-        discriminator_grads
+        discriminator_grads,
+        batch_num,
+        learning_rate,
+        b1=0.5,
     )
+
     discriminator_loss = discriminator_loss_real + discriminator_loss_fake
     metrics.update({'discriminator_loss': discriminator_loss})
 
@@ -127,10 +142,18 @@ def train_step(
         discriminator_params,
         noise_batched_for_generator
     )
-    generator_params = tree.map(
-        lambda p, g: p - learning_rate * g,
+    # generator_params = tree.map(
+    #     lambda p, g: p - learning_rate * g,
+    #     generator_params,
+    #     generator_grads
+    # )
+    generator_params, generator_optimizer_params = apply_adam(
+        generator_optimizer_params,
         generator_params,
-        generator_grads
+        generator_grads,
+        batch_num,
+        learning_rate,
+        b1=0.5,
     )
     metrics.update({'generator_loss': generator_loss})
     return generator_params, discriminator_params, metrics
@@ -145,6 +168,9 @@ generator_params = init_mlp_params(
 
 key = random.split(key, 1)[0]
 discriminator_params = init_mlp_params(key, (image_size, 512, 256, 128, 1))
+
+generator_optimizer_params = build_adam(generator_params)
+discriminator_optimizer_params = build_adam(discriminator_params)
 
 
 # Load dataset
@@ -173,7 +199,7 @@ def generate_and_save_image(generator_params, epoch, key):
 # Training loop
 n_epochs = 1000
 n_batches = 0
-learning_rate = 0.01
+learning_rate = 0.0002
 gen_per_batch_losses = []
 disc_per_batch_losses = []
 key = random.key(4444)
@@ -197,7 +223,10 @@ for epoch in range(1, n_epochs + 1):
         generator_params, discriminator_params, metrics = train_step(
             generator_params,
             discriminator_params,
+            generator_optimizer_params,
+            discriminator_optimizer_params,
             x_batched=x,
+            batch_num=batch,
             noise_batched_for_generator=noise_batched_for_generator,
             noise_batched_for_discriminator=noise_batched_for_discriminator,
             learning_rate=learning_rate,
@@ -209,7 +238,6 @@ for epoch in range(1, n_epochs + 1):
               end="")
         gen_per_batch_losses.append(metrics['generator_loss'])
         disc_per_batch_losses.append(metrics['discriminator_loss'])
-        # exit(1337)
     generator_loss = jnp.mean(jnp.asarray(gen_per_batch_losses))
     discriminator_loss = jnp.mean(jnp.asarray(disc_per_batch_losses))
     print(f"\rEpoch: {epoch}/{n_epochs} | Batch {batch_str} | "
