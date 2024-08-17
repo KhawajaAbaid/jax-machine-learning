@@ -1,5 +1,4 @@
 import jax
-import optax
 from jax import random, numpy as jnp, vmap, tree, nn
 import tensorflow as tf
 import tensorflow_datasets as tfds
