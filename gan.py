@@ -43,10 +43,6 @@ def discriminaor_forward(params, x):
 
 
 def discriminator_forward_and_loss(params, x_batched, y_batched):
-    """
-    Discriminator forward pass and loss computation for a single instance.
-    Expected to be wrapped with vmap for batching.
-    """
     def for_single_instance(x, y):
         logits = discriminaor_forward(params, x)
         # binary cross entropy loss
