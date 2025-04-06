@@ -1,8 +1,6 @@
 import jax
 from jax import random, numpy as jnp, nn, tree_util, vmap
-from typing import Sequence, Union
-from types_util import ActivationType
-from dtypes import default_dtype
+from typing import Sequence
 from functools import partial
 
 
