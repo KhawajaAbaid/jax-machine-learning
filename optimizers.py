@@ -2,6 +2,17 @@ import jax
 from jax import tree, numpy as jnp
 
 
+# =================================
+# SGD Optimizer
+# =================================
+def apply_sgd(params, grad, lr):
+    return tree.map(lambda p, g: p - lr * g, params, grad)
+
+
+
+# =================================
+# ADAM Optimizer
+# =================================
 def build_adam(
         params
 ):
