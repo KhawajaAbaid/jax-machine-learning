@@ -87,7 +87,7 @@ def init_conv2d_params(
     kernel = initializer(kernel_key, (kernel_shape[0], kernel_shape[1], num_channels, num_filters))
     bias = None
     if use_bias:
-        bias = initializer(bias_key, (num_filters,))
+        bias = initializer(bias_key, (num_filters, 1))
     return Conv2D(num_filters, kernel, bias, strides, padding)
 
 
@@ -121,3 +121,59 @@ def init_cnn_params(
             config['num_filters']
         )
     return CNN(layers)
+
+def apply_conv2d(
+        conv2d: Conv2D,
+        x: jnp.ndarray,
+):
+    """
+    Apply a Conv2D layer to an input tensor.
+    
+    Args:
+        conv2d: Conv2D layer parameters.
+        x: Input tensor of shape (batch_size, height, width, channels).
+    
+    Returns:
+        Output tensor after applying the Conv2D layer.
+    """
+    batch_size, in_height, in_width, in_channels = x.shape
+    output_shape = (
+        (x.shape[1] - conv2d.kernel.shape[0]) // conv2d.strides[0] + 1,
+        (x.shape[2] - conv2d.kernel.shape[1]) // conv2d.strides[1] + 1,
+        conv2d.num_filters
+    )
+    output = jnp.zeros((x.shape[0], *output_shape), dtype=x.dtype, device=x.device)
+    for c in range(conv2d.num_filters):
+        kernel = conv2d.kernel[..., c]
+        bias = conv2d.bias[c]
+        for i in range(output_shape[0]):
+            for j in range(output_shape[1]):
+                h_start = i * conv2d.strides[0]     # horizontal start
+                h_end = h_start + conv2d.kernel.shape[0]
+                v_start = j * conv2d.strides[1]    # vertical start
+                v_end = v_start + conv2d.kernel.shape[1]
+                region = x[:, v_start:v_end, h_start:h_end, :]
+                prod = region * kernel
+                summed = jnp.sum(prod, axis=(1, 2, 3))
+                final = summed + bias
+                output = output.at[:, i, j, c].set(final)
+    return output
+
+
+def apply_cnn(
+        cnn: CNN,
+        x: jnp.ndarray,
+):
+    """
+    Apply a CNN to an input tensor.
+    
+    Args:
+        cnn: CNN parameters.
+        x: Input tensor of shape (batch_size, height, width, channels).
+    
+    Returns:
+        Output tensor after applying the CNN.
+    """
+    for layer in cnn.layers:
+        x = apply_conv2d(layer, x)
+    return x
